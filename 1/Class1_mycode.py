@@ -82,4 +82,4 @@ print ("The value of Y_noisy is:\n",Y_noisy)
 B_est, residuals, rank, s = np.linalg.lstsq(power_T, Y_noisy, rcond=None) 
 print("\nEstimated B matrix:\n", B_est)
 
-# 
+
