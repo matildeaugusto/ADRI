@@ -13,10 +13,12 @@ nc=4                        # Number of consumers (1 to nc)                  %%D
 ts=60                       #start period of analysis (Can be from 1 to 96)  %%Data Notes: ts=60
 te=71                       #Last period of analysis (Can be from 1 to 96)   %%Data Notes: te=71
 #phase =[3,2,1,3]            #To obtain the same values of lecture notes (??????)
-noise = 0
+phase = np.array([3,2,1,3]) # Convert list to numpy array phase_idx = phase - 1
+noise = 0.25
+
 
 ## To obtain random values in the phases
-phase = randint(1, 4, nc)  #To obtain random values
+#phase = randint(1, 4, nc)  #To obtain random values
 phase_idx = phase - 1
 
 print ("The distribution of consumers in each phase is: ", phase)
@@ -71,7 +73,7 @@ print ("In the lecture notes, this value is represented by Y.")
 print ("The value of Y is:\n",Y)
 
 # Add noise to Y
-noise_matrix = noise * (2 * np.random.rand(*Y.shape) - 1)
+noise_matrix = noise * (np.random.rand(*Y.shape))
 Y_noisy = Y + noise_matrix
 print ("The matrix 'Y_noisy' represents the total power consumed in each phase (f) in each period (k) with noise added.")
 print ("The value of Y_noisy is:\n",Y_noisy)
@@ -80,4 +82,4 @@ print ("The value of Y_noisy is:\n",Y_noisy)
 B_est, residuals, rank, s = np.linalg.lstsq(power_T, Y_noisy, rcond=None) 
 print("\nEstimated B matrix:\n", B_est)
 
-## Plotting the results
+# 
