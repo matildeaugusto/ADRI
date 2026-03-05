@@ -1,4 +1,4 @@
-<<<<<<< HEAD
+<<<<<<<<< Temporary merge branch 1
 import numpy as np
 from openpyxl import load_workbook
 import matplotlib.pyplot as plt
@@ -128,7 +128,7 @@ plt.title("Critical ε vs noise for different consumer counts")
 plt.grid(True)
 plt.legend()
 plt.show()
-=======
+=========
 import numpy as np
 from openpyxl import load_workbook
 import matplotlib.pyplot as plt
@@ -290,4 +290,4 @@ plt.title("Critical ε vs noise for different consumer counts (Correct Model)")
 plt.grid(True)
 plt.legend()
 plt.show()
->>>>>>> 83a8d74a31077a5043079f719fa854dce50401a0
+>>>>>>>>> Temporary merge branch 2
