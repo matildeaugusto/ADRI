@@ -42,14 +42,20 @@ nLines=Net_Info.shape[0]
 
 Y=np.zeros((nBus,nBus), dtype=complex)
 
-#Complete the Y matrix nad update the number of lines
-for i in range (Net_Info.shape[0]):
-    y_aux=Net_Info[i,2].replace(",",".")
-    y_aux=y_aux.replace("i","j")
-    Y[Net_Info[i,0]-1,Net_Info[i,0]-1]=Y[Net_Info[i,0]-1,Net_Info[i,0]-1]+complex(y_aux)*networkFactor
-    Y[Net_Info[i,1]-1,Net_Info[i,1]-1]=Y[Net_Info[i,1]-1,Net_Info[i,1]-1]+complex(y_aux)*networkFactor
-    Y[Net_Info[i,0]-1,Net_Info[i,1]-1]=Y[Net_Info[i,0]-1,Net_Info[i,1]-1]-complex(y_aux)*networkFactor
-    Y[Net_Info[i,1]-1,Net_Info[i,0]-1]=Y[Net_Info[i,1]-1,Net_Info[i,0]-1]-complex(y_aux)*networkFactor
+# LV Grid: G >> B - SO ALTEREI AQUI
+for i in range(Net_Info.shape[0]):
+    y_aux = Net_Info[i,2].replace(",",".")
+    y_aux = y_aux.replace("i","j")
+    
+    y_line = complex(y_aux)  
+    
+    y_lv = complex(y_line.real * networkFactor, y_line.imag)
+
+    Y[Net_Info[i,0]-1, Net_Info[i,0]-1] += y_lv
+    Y[Net_Info[i,1]-1, Net_Info[i,1]-1] += y_lv
+    Y[Net_Info[i,0]-1, Net_Info[i,1]-1] -= y_lv
+    Y[Net_Info[i,1]-1, Net_Info[i,0]-1] -= y_lv
+
 
             
 # Remove the slack bus from the admitance matrix            
@@ -65,8 +71,6 @@ Bsys=Yl.imag
 # Susceptance Matrix
 B=Yl.imag 
 print("The admitance matrix Y is:\n", Y, "\n")
-Y_inv = np.linalg.inv(Y)
-print("A inversa da matriz Y é:\n", Y_inv, "\n")
 print("The conductance matrix G is\n", G, "\n")
 print("The susceptance matrix B is\n",B, "\n")
 
