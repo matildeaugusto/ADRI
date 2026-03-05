@@ -8,6 +8,9 @@ noiseFactor=0.0025     #noise
 networkFactor=100      #to change the characteristics of the network (Y)
 PtestFactor=3          #to obtain losses similar to the training data;
 
+G_factor = 100
+B_factor = 0.01
+
 file = 'DASG_Prob2_new.xlsx'
 
 Info = np.array(pd.read_excel(file, sheet_name='Info', header=None))
@@ -55,8 +58,6 @@ for i in range(Net_Info.shape[0]):
     Y[Net_Info[i,1]-1, Net_Info[i,1]-1] += y_lv
     Y[Net_Info[i,0]-1, Net_Info[i,1]-1] -= y_lv
     Y[Net_Info[i,1]-1, Net_Info[i,0]-1] -= y_lv
-
-
             
 # Remove the slack bus from the admitance matrix            
 Yl=np.delete(Y, np.s_[SlackBus-1], axis=0)
@@ -65,7 +66,7 @@ Yl=np.delete(Yl, np.s_[SlackBus-1], axis=1)
 Pl = P.copy()
 
 # Conductance Matrix
-G=Yl.real / networkFactor
+G=Yl.real
 Bsys=Yl.imag
 
 # Susceptance Matrix
@@ -233,3 +234,6 @@ plt.legend()
 plt.grid(True)
 plt.show()
 
+print("Mean |G|:", np.mean(np.abs(G)))
+print("Mean |B|:", np.mean(np.abs(Bsys)))
+print("Ratio G/B:", np.mean(np.abs(G))/np.mean(np.abs(Bsys)))
