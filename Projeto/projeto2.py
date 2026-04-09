@@ -1,4 +1,6 @@
 import numpy as np
+import matplotlib.pyplot as plt
+
 
 # ============================================================
 # DADOS DO LAB (dataset real)
@@ -266,3 +268,224 @@ print("Normal:", bin_ind["binary_normal"])
 print("Falha :", bin_ind["binary_fault"])
 print("Resumo → normal detetado como falha:", bin_ind["global_normal"])
 print("Resumo → falha detetada:", bin_ind["global_fault"])
+
+# ============================================================
+# GRAFICO 1 — Tensões fase-neutro (Normal vs Falha)
+# ============================================================
+
+# Selecionar um índice do dataset (por exemplo, o primeiro)
+idx = 0
+
+Vn = np.abs(baseline[idx, :])   # tensões normal
+Vf = np.abs(fault[idx, :])      # tensões falha
+
+plt.figure(figsize=(6,4))
+plt.bar(["Va","Vb","Vc"], Vn, alpha=0.7, label="Normal")
+plt.bar(["Va","Vb","Vc"], Vf, alpha=0.7, label="Falha")
+plt.title("Tensões fase-neutro — Normal vs Falha")
+plt.ylabel("Magnitude [pu]")
+plt.grid(axis='y', linestyle='--', alpha=0.5)
+plt.legend()
+plt.tight_layout()
+plt.show()
+
+
+# ============================================================
+# GRAFICO 2 — Indicador de desequilíbrio (Normal vs Falha)
+# ============================================================
+
+unb_norm = ind["unbalance_normal"]
+unb_fault = ind["unbalance_fault"]
+
+plt.figure(figsize=(6,4))
+plt.plot(unb_norm, 'o-', label="Normal")
+plt.plot(unb_fault, 'o-', label="Falha")
+plt.title("Desequilíbrio de tensão — Normal vs Falha")
+plt.xlabel("Amostra")
+plt.ylabel("Desequilíbrio [pu]")
+plt.grid(True, linestyle='--', alpha=0.5)
+plt.legend()
+plt.tight_layout()
+plt.show()
+
+
+# ============================================================
+# HEATMAP — Desequilíbrio Normal (load × Zn)
+# ============================================================
+
+
+
+# Extrair matriz 4x3 com os valores médios de unbalance_normal
+load_factors = [0.5, 1.0, 1.5, 2.0]
+Zn_values = [0.001, 0.01, 0.1]
+
+# Construir matriz normal (4 linhas = loads, 3 colunas = Zn)
+unb_norm_matrix = np.zeros((len(load_factors), len(Zn_values)))
+
+k = 0
+for i, lf in enumerate(load_factors):
+    for j, Zn in enumerate(Zn_values):
+        unb_norm_matrix[i, j] = validation_results[k]["mean_unbalance_normal"]
+        k += 1
+
+plt.figure(figsize=(6,5))
+plt.imshow(unb_norm_matrix, cmap="viridis", aspect="auto")
+plt.colorbar(label="Desequilíbrio normal [pu]")
+
+plt.xticks(np.arange(len(Zn_values)), Zn_values)
+plt.yticks(np.arange(len(load_factors)), load_factors)
+
+plt.xlabel("Impedância do neutro Zn [pu]")
+plt.ylabel("Load factor")
+plt.title("Heatmap — Desequilíbrio Normal (load × Zn)")
+
+plt.tight_layout()
+plt.show()
+
+# ============================================================
+# BARRAS — Desequilíbrio em Falha (load × Zn)
+# ============================================================
+
+unb_fault_values = [r["mean_unbalance_fault"] for r in validation_results]
+
+plt.figure(figsize=(7,4))
+plt.bar(range(len(unb_fault_values)), unb_fault_values, color="orange")
+
+plt.axhline(np.mean(unb_fault_values), color="red", linestyle="--",
+            label=f"Média ≈ {np.mean(unb_fault_values):.3f}")
+
+plt.title("Desequilíbrio em Falha — Sempre Elevado e Constante")
+plt.ylabel("Desequilíbrio [pu]")
+plt.xlabel("Cenário (load × Zn)")
+plt.legend()
+plt.grid(axis='y', linestyle='--', alpha=0.5)
+
+plt.tight_layout()
+plt.show()
+
+def add_noise(V, sigma):
+    noise = sigma * np.random.randn(*V.shape)
+    return V + noise
+
+def noise_sensitivity_test(s, noise_levels, N=50):
+
+    results = []
+
+    for sigma in noise_levels:
+
+        correct_normal = 0
+        correct_fault = 0
+
+        for _ in range(N):
+
+            # simular normal e falha
+            Vn = simulate_normal(s)
+            Vf = simulate_fault(s)
+
+            # adicionar ruído
+            Vn_noisy = add_noise(np.abs(Vn), sigma)
+            Vf_noisy = add_noise(np.abs(Vf), sigma)
+
+            # indicadores
+            ind_n = np.max(Vn_noisy, axis=1) - np.min(Vn_noisy, axis=1)
+            ind_f = np.max(Vf_noisy, axis=1) - np.min(Vf_noisy, axis=1)
+
+            # threshold
+            thr = np.mean(ind_n) + 3*np.std(ind_n)
+
+            # classificação
+            if np.all(ind_n < thr):
+                correct_normal += 1
+            if np.all(ind_f > thr):
+                correct_fault += 1
+
+        results.append({
+            "sigma": sigma,
+            "normal_accuracy": correct_normal / N,
+            "fault_accuracy": correct_fault / N
+        })
+
+    return results
+
+
+
+# ============================================================
+# TESTE FINAL — EXECUTAR METODOLOGIA E GERAR RESULTADOS
+# ============================================================
+
+if __name__ == "__main__":
+
+    print("\n=== TESTE FINAL — EXECUÇÃO COMPLETA ===")
+
+    # 1) Operação normal e falha
+    baseline = simulate_normal(s)
+    fault = simulate_fault(s)
+
+    # 2) Indicadores
+    ind = compute_indicators(baseline, fault)
+
+    print("\n> Desequilíbrio (normal):", ind["unbalance_normal"])
+    print("> Desequilíbrio (falha) :", ind["unbalance_fault"])
+
+    # 3) Validação paramétrica
+    validation_results = sweep_loads_and_Zn(s, load_factors, Zn_values)
+
+    print("\n=== VALIDAÇÃO PARAMÉTRICA ===")
+    for r in validation_results:
+        print(f"Load x{r['load_factor']}, Zn={r['Zn']}: "
+              f"Unb_normal_mean={r['mean_unbalance_normal']:.4f}, "
+              f"Unb_fault_mean={r['mean_unbalance_fault']:.4f}")
+
+    # 4) Indicador binário
+    bin_ind = binary_fault_indicator(baseline, fault)
+
+    print("\n=== INDICADOR BINÁRIO ===")
+    print(f"Threshold automático: {bin_ind['threshold']:.4f}")
+    print("Normal:", bin_ind["binary_normal"])
+    print("Falha :", bin_ind["binary_fault"])
+    print("Resumo → normal detetado como falha:", bin_ind["global_normal"])
+    print("Resumo → falha detetada:", bin_ind["global_fault"])
+   # ============================================================
+    # PLOT — Voltage Unbalance: Normal vs Fault + Threshold
+    # ============================================================
+
+    unb_norm = ind["unbalance_normal"]
+    unb_fault = ind["unbalance_fault"]
+    thr = bin_ind["threshold"]   # automatic threshold
+
+    plt.figure(figsize=(6,4))
+
+    # Curves
+    plt.plot(unb_norm, 'o-', linewidth=2, markersize=6, label="Normal")
+    plt.plot(unb_fault, 'o-', linewidth=2, markersize=6, label="Fault")
+
+    # Threshold line
+    plt.axhline(thr, color='red', linestyle='--', linewidth=2,
+                label=f"Threshold = {thr:.3f}")
+
+    # Labels and style
+    plt.title("Voltage Unbalance — Normal vs Fault")
+    plt.xlabel("Sample")
+    plt.ylabel("Unbalance [pu]")
+    plt.grid(True, linestyle='--', alpha=0.5)
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
+
+    noise_levels = [0, 0.05, 0.1, 0.15, 0.2]
+    sens = noise_sensitivity_test(s, noise_levels)
+
+    plt.figure(figsize=(6,4))
+    plt.plot(noise_levels, [r["normal_accuracy"] for r in sens],
+            'o-', label="Normal correctly classified")
+    plt.plot(noise_levels, [r["fault_accuracy"] for r in sens],
+            'o-', label="Fault correctly detected")
+
+    plt.xlabel("Noise level")
+    plt.ylabel("Accuracy")
+    plt.title("Sensitivity to Measurement Noise")
+    plt.grid(True, linestyle='--', alpha=0.5)
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
+

@@ -302,7 +302,7 @@ def hmm_classify(obs, states, A, means):
 
 
 # ============================================================
-# 7. EXECUTAR PROJETO COMPLETO
+# 7. EXECUTAR PROJETO COMPLETO (COM SPIKE & FROZEN NO HMM)
 # ============================================================
 
 if __name__ == "__main__":
@@ -313,7 +313,6 @@ if __name__ == "__main__":
     # ============================
     print("\n=== PASSO 1 — BASELINE SE ===")
     v0, z0, Hx, x0, r0 = compute_baseline(Y, SlackBus, I)
-    print("Resíduos baseline:", r0)
     thr_SE = 30 * np.median(np.abs(r0))
     print("Threshold SE (heurístico):", thr_SE)
 
@@ -324,15 +323,13 @@ if __name__ == "__main__":
     print("\n=== PASSO 2 — LINE OUTAGE 1–2 ===")
     Y_fault = simulate_line_outage(Y, (0,1))
     x_fault, r_fault = run_SE(Y_fault, SlackBus, I, z0)
-    print("Resíduos após falha:", r_fault)
 
     print("\n=== PASSO 2 — METER FAILURE (I12 corrompido) ===")
     z_fault = simulate_meter_failure(z0, 0, corruption=20)
     x_fault2, r_fault2 = run_SE(Y, SlackBus, I, z_fault)
-    print("Resíduos após falha:", r_fault2)
 
     # ============================
-    # PASSO 3 — AUTO‑REGRESSÃO
+    # PASSO 3 — AUTO‑REGRESSÃO (BASELINE)
     # ============================
 
     print("\n=== PASSO 3 — AUTO‑REGRESSÃO ===")
@@ -344,78 +341,65 @@ if __name__ == "__main__":
     anomalies_I, thr_I = detect_anomalies(r_I)
     frozen_I = detect_frozen_meter(I123)
 
-    print("\nAR(1) — I123")
-    print("a =", a_I, "b =", b_I)
-    print("Threshold AR_I =", thr_I)
-    print("Anomalias baseline I123:", anomalies_I)
-    print("Frozen meter baseline I123:", frozen_I)
-
     # AR para V3
     a_V, b_V = fit_AR1(V3)
     r_V, _ = compute_residuals(V3, a_V, b_V)
     anomalies_V, thr_V = detect_anomalies(r_V)
     frozen_V = detect_frozen_meter(V3)
 
-    print("\nAR(1) — V3")
-    print("a =", a_V, "b =", b_V)
-    print("Threshold AR_V =", thr_V)
-    print("Anomalias baseline V3:", anomalies_V)
-    print("Frozen meter baseline V3:", frozen_V)
-
     # ============================
-    # PASSO 4 — FALHAS ADICIONAIS
+    # PASSO 4 — FALHAS ADICIONAIS (SE + AR)
     # ============================
 
     print("\n=== PASSO 4 — ABNORMAL LOAD (bus 2 x 2.0) ===")
     I_abnormal = simulate_abnormal_load(I, bus=1, scale=2.0)
     v_ab, z_ab, Hx_ab, x_ab, r_ab = compute_baseline(Y, SlackBus, I_abnormal)
-    print("Resíduos após abnormal load:", r_ab)
+
+    # gerar série temporal para abnormal load
+    I123_ab, V3_ab = generate_time_series(Y, SlackBus, I_abnormal)
+    a_I_ab, b_I_ab = fit_AR1(I123_ab)
+    r_I_ab, _ = compute_residuals(I123_ab, a_I_ab, b_I_ab)
+    a_V_ab, b_V_ab = fit_AR1(V3_ab)
+    r_V_ab, _ = compute_residuals(V3_ab, a_V_ab, b_V_ab)
 
     print("\n=== PASSO 4 — POWER FLOW FAULT (factor 1.5) ===")
     z_pf = simulate_power_flow_fault(Y, SlackBus, I, factor=1.5)
     x_pf, r_pf = run_SE(Y, SlackBus, I, z_pf)
-    print("Resíduos após power flow fault:", r_pf)
+
+    # para power_flow_fault, usamos AR baseline (podes mudar se quiseres outra simulação)
 
     # ============================
-    # PASSO 5 — AR EM FALHAS
+    # PASSO 5 — AR EM FALHAS (SPIKE & FROZEN)
     # ============================
 
     print("\n=== PASSO 5 — AR EM FALHAS (SPIKE & FROZEN) ===")
 
-    # Spike em I123
+    # Spike em I123 e V3
     I123_spike = simulate_AR_spike(I123, t_spike=100, factor=3.0)
     r_I_spike, _ = compute_residuals(I123_spike, a_I, b_I)
-    anomalies_I_spike, _ = detect_anomalies(r_I_spike, factor=5)
-    print("\nI123 SPIKE — nº anomalias AR:", len(anomalies_I_spike))
 
-    # Frozen em I123
-    I123_frozen = simulate_AR_frozen(I123, t_start=100)
-    r_I_frozen, _ = compute_residuals(I123_frozen, a_I, b_I)
-    anomalies_I_frozen, _ = detect_anomalies(r_I_frozen, factor=5)
-    print("I123 FROZEN — nº anomalias AR:", len(anomalies_I_frozen))
-
-    # Spike em V3
     V3_spike = simulate_AR_spike(V3, t_spike=100, factor=3.0)
     r_V_spike, _ = compute_residuals(V3_spike, a_V, b_V)
-    anomalies_V_spike, _ = detect_anomalies(r_V_spike, factor=5)
-    print("\nV3 SPIKE — nº anomalias AR:", len(anomalies_V_spike))
 
-    # Frozen em V3
+    # Frozen em I123 e V3
+    I123_frozen = simulate_AR_frozen(I123, t_start=100)
+    r_I_frozen, _ = compute_residuals(I123_frozen, a_I, b_I)
+
     V3_frozen = simulate_AR_frozen(V3, t_start=100)
     r_V_frozen, _ = compute_residuals(V3_frozen, a_V, b_V)
-    anomalies_V_frozen, _ = detect_anomalies(r_V_frozen, factor=5)
-    print("V3 FROZEN — nº anomalias AR:", len(anomalies_V_frozen))
 
     # ============================
-    # VETORES DE OBSERVAÇÃO PARA HMM
+    # VETORES DE OBSERVAÇÃO PARA HMM (AGORA COM SPIKE & FROZEN)
     # ============================
 
     observations = {}
     observations["normal"] = build_observation_vector(r0, r_I, r_V)
     observations["line_outage"] = build_observation_vector(r_fault, r_I, r_V)
     observations["meter_failure"] = build_observation_vector(r_fault2, r_I, r_V)
-    observations["abnormal_load"] = build_observation_vector(r_ab, r_I_spike, r_V_spike)
+    observations["abnormal_load"] = build_observation_vector(r_ab, r_I_ab, r_V_ab)
     observations["power_flow_fault"] = build_observation_vector(r_pf, r_I, r_V)
+    observations["spike"] = build_observation_vector(r0, r_I_spike, r_V_spike)
+    observations["frozen_meter"] = build_observation_vector(r0, r_I_frozen, r_V_frozen)
 
     print("\n=== VETORES DE OBSERVAÇÃO (para HMM) ===")
     for k, v in observations.items():
@@ -430,26 +414,174 @@ if __name__ == "__main__":
     states, A, means = hmm_train(observations)
 
     for scenario, obs in observations.items():
-        state, likelihoods = hmm_classify(obs, states, A, means)
-        print(f"\nCenário: {scenario}")
-        print("Observação:", obs)
-        print("Classificação HMM:", state)
-
-        # Observação original (sem ruído)
         state_clean, _ = hmm_classify(obs, states, A, means)
 
-        # Adicionar ruído às observações
-        noise_level = 0.05   # 5% de ruído relativo
+        noise_level = 0.2
         noise = np.random.randn(*obs.shape) * noise_level
-
         obs_noisy = obs + noise
-
-        # Classificação com ruído
         state_noisy, _ = hmm_classify(obs_noisy, states, A, means)
 
-        print(f"\nCenário: {scenario}")
-        print("Observação limpa:", obs)
-        print("Classificação limpa:", state_clean)
-        print("Observação com ruído:", obs_noisy)
-        print("Classificação com ruído:", state_noisy)
+        print(f"\nScenario: {scenario}")
+        print("Observation (clean):", obs)
+        print("Class (clean):", state_clean)
+        print("Observation (noisy):", obs_noisy)
+        print("Class (noisy):", state_noisy)
 
+    # import matplotlib.pyplot as plt
+    # print("\n================ RESULTADOS PARA O SLIDE ================\n")
+
+    # # ============================================================
+    # # 1) SE — BASELINE
+    # # ============================================================
+    # print("SE — Baseline")
+    # print("Residuals (magnitude):", np.abs(r0))
+    # print("Threshold SE:", thr_SE)
+
+    # plt.figure(figsize=(8,4))
+    # plt.stem(np.abs(r0))
+    # plt.axhline(thr_SE, color='red', linestyle='--', label='Threshold')
+    # plt.title("SE Residuals — Baseline")
+    # plt.xlabel("Measurement index")
+    # plt.ylabel("|residual|")
+    # plt.legend()
+    # plt.grid(True)
+    # plt.tight_layout()
+    # plt.show()
+
+
+    # # ============================================================
+    # # 2) SE — LINE OUTAGE
+    # # ============================================================
+    # print("\nSE — Line Outage (1–2)")
+    # print("Residuals (magnitude):", np.abs(r_fault))
+
+    # plt.figure(figsize=(8,4))
+    # plt.stem(np.abs(r_fault))
+    # plt.title("SE Residuals — Line Outage")
+    # plt.xlabel("Measurement index")
+    # plt.ylabel("|residual|")
+    # plt.grid(True)
+    # plt.tight_layout()
+    # plt.show()
+
+
+    # # ============================================================
+    # # 3) SE — METER FAILURE
+    # # ============================================================
+    # print("\nSE — Meter Failure (I12 corrupted)")
+    # print("Residuals (magnitude):", np.abs(r_fault2))
+
+    # plt.figure(figsize=(8,4))
+    # plt.stem(np.abs(r_fault2))
+    # plt.title("SE Residuals — Meter Failure")
+    # plt.xlabel("Measurement index")
+    # plt.ylabel("|residual|")
+    # plt.grid(True)
+    # plt.tight_layout()
+    # plt.show()
+
+
+    # # ============================================================
+    # # 4) AR — BASELINE, SPIKE, FROZEN
+    # # ============================================================
+
+    # # Garantir que as variáveis existem
+    # anomalies_I_spike, _ = detect_anomalies(r_I_spike)
+    # anomalies_I_frozen, _ = detect_anomalies(r_I_frozen)
+
+    # print("\nAR — Baseline I123")
+    # print("Spike anomalies:", len(anomalies_I_spike))
+    # print("Frozen anomalies:", len(anomalies_I_frozen))
+
+    # # Série temporal baseline
+    # plt.figure(figsize=(10,4))
+    # plt.plot(I123, label="I123 (time series)")
+    # plt.title("Time Series — I123 (Baseline)")
+    # plt.xlabel("Time")
+    # plt.ylabel("Current")
+    # plt.grid(True)
+    # plt.legend()
+    # plt.tight_layout()
+    # plt.show()
+
+    # # Resíduos baseline
+    # plt.figure(figsize=(10,4))
+    # plt.plot(r_I, label="AR(1) Residuals")
+    # plt.axhline(thr_I, color='red', linestyle='--', label='AR Threshold')
+    # plt.title("AR(1) Residuals — I123 (Baseline)")
+    # plt.xlabel("Time")
+    # plt.ylabel("Residual")
+    # plt.grid(True)
+    # plt.legend()
+    # plt.tight_layout()
+    # plt.show()
+
+    # # Spike
+    # plt.figure(figsize=(10,4))
+    # plt.plot(r_I_spike, label="Residuals (Spike)")
+    # plt.title("AR(1) Residuals — I123 Spike")
+    # plt.xlabel("Time")
+    # plt.ylabel("Residual")
+    # plt.grid(True)
+    # plt.legend()
+    # plt.tight_layout()
+    # plt.show()
+
+    # # Frozen
+    # plt.figure(figsize=(10,4))
+    # plt.plot(r_I_frozen, label="Residuals (Frozen)")
+    # plt.title("AR(1) Residuals — I123 Frozen")
+    # plt.xlabel("Time")
+    # plt.ylabel("Residual")
+    # plt.grid(True)
+    # plt.legend()
+    # plt.tight_layout()
+    # plt.show()
+
+
+    # # ============================================================
+    # # 5) HMM — OBSERVATION VECTORS
+    # # ============================================================
+    # print("\nHMM — Observation Vectors:")
+    # for k, v in observations.items():
+    #     print(f"{k}: {v}")
+
+    # states_list = list(observations.keys())
+    # obs_matrix = np.array([observations[s] for s in states_list])
+
+    # plt.figure(figsize=(10,5))
+    # x = np.arange(len(states_list))
+    # width = 0.25
+
+    # plt.bar(x - width, obs_matrix[:,0], width, label='max|r_SE|')
+    # plt.bar(x,         obs_matrix[:,1], width, label='max|r_AR_I|')
+    # plt.bar(x + width, obs_matrix[:,2], width, label='max|r_AR_V|')
+
+    # plt.xticks(x, states_list, rotation=20)
+    # plt.ylabel("Magnitude")
+    # plt.title("Observation Vectors per Scenario (HMM)")
+    # plt.legend()
+    # plt.grid(axis='y', linestyle='--', alpha=0.6)
+    # plt.tight_layout()
+    # plt.show()
+
+
+    # # ============================================================
+    # # 6) HMM — CLASSIFICATION (CLEAN + NOISY)
+    # # ============================================================
+    # print("\nHMM — Classification Results")
+
+    # for scenario, obs in observations.items():
+    #     state_clean, _ = hmm_classify(obs, states, A, means)
+
+    #     noise = np.random.randn(*obs.shape) * 0.05
+    #     obs_noisy = obs + noise
+    #     state_noisy, _ = hmm_classify(obs_noisy, states, A, means)
+
+    #     print(f"\nScenario: {scenario}")
+    #     print("  Clean observation:", obs)
+    #     print("  Classified as:", state_clean)
+    #     print("  Noisy observation:", obs_noisy)
+    #     print("  Classified as:", state_noisy)
+
+    # print("\n================ FIM DOS RESULTADOS ================\n")
